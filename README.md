@@ -1,36 +1,39 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PC 보안 자가점검 시스템
 
-## Getting Started
+정보통신망법 기반 개인 PC 보안 자가점검 도구입니다.
 
-First, run the development server:
+## 설치 방법
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+### 최초 설치 (처음 실행하는 경우)
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+1. 이 저장소를 ZIP으로 다운로드
+   - GitHub 페이지에서 `Code` → `Download ZIP` 클릭
+2. 원하는 폴더에 압축 해제
+3. **`install.bat`** 을 **우클릭 → 관리자 권한으로 실행**
+4. 자동으로 브라우저가 열리며 시작됩니다
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 이후 실행 (이미 설치된 경우)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **`start.bat`** 더블클릭
 
-## Learn More
+## 사전 요구사항
 
-To learn more about Next.js, take a look at the following resources:
+| 항목 | 버전 | 다운로드 |
+|------|------|---------|
+| Node.js | 18 이상 (LTS) | https://nodejs.org |
+| Python | 3.8 이상 | https://python.org |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+> Python은 PDF/Excel 보고서 기능에 필요합니다.  
+> Node.js만 있어도 점검 기능은 정상 동작합니다.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 기능
 
-## Deploy on Vercel
+- ✅ 자동 점검: 비밀번호 변경일, 화면보호기, 백신(V3/Defender), OS 업데이트 등
+- ✅ V3 Internet Security 9.0 실시간 감시·방화벽 자동 확인
+- ✅ OfficeKeeper DLP 설치 확인
+- ✅ PDF / Excel 보고서 생성
+- ✅ 한글 지원
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 문의
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+보안팀 이메일 또는 담당자에게 문의하세요.
