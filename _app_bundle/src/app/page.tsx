@@ -360,7 +360,24 @@ export default function App() {
     addToast(`${format.toUpperCase()} 보고서 생성 중...`,"info");
     try{
       const res=await fetch("/api/report",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({results,format,inspector:{name:currentName,dept:currentDept,date:new Date().toLocaleDateString("ko-KR"),os:"Windows"}})});
+        body:JSON.stringify({results,format,userInfo:{name:currentName,dept:currentDept,pcName:navigator.userAgent},inspector:{name:currentName,dept:currentDept,date:new Date().toLocaleDateString("ko-KR"),os:"Windows"}})});
+
+      if(!res.ok){
+        const err=await res.json().catch(()=>({error:"알수없는 오류"}));
+        throw new Error(err.error||"생성 실패");
+      }
+
+      const contentType=res.headers.get("content-type")||"";
+      if(contentType.includes("application/pdf")){
+        const blob=await res.blob();
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement("a");
+        const dateStr=new Date().toLocaleDateString("ko-KR").replace(/\./g,"").replace(/ /g,"");
+        a.href=url;a.download=`PC보안점검보고서_${dateStr}.pdf`;a.click();URL.revokeObjectURL(url);
+        addToast("PDF 다운로드 완료!","success");
+        return;
+      }
+
       const data=await res.json();
       if(!data.success)throw new Error(data.error||"생성 실패");
 
