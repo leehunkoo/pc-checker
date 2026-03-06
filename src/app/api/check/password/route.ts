@@ -16,7 +16,8 @@ export async function GET() {
 
   let passwordAgeDays = 9999
   for (const line of raw.split(/\r?\n/)) {
-    if (line.includes("암호 설정") || line.includes("Password last set")) {
+    const isPasswordLine = line.includes("암호 설정") || line.includes("Password last set") || line.includes("마지막으로 암호")
+    if (isPasswordLine) {
       const m = line.match(/(\d{4}[-\/]\d{2}[-\/]\d{2})/)
       if (m) {
         const d = new Date(m[1])
@@ -27,13 +28,9 @@ export async function GET() {
     }
   }
 
-  if (passwordAgeDays <= 30) {
-    return NextResponse.json({ status: "pass", detail: `비밀번호 ${passwordAgeDays}일 전 변경 — 양호`, passwordAgeDays, link: "ms-settings:signinoptions" })
-  } else if (passwordAgeDays <= 90) {
-    return NextResponse.json({ status: "warn", detail: `비밀번호 ${passwordAgeDays}일 전 변경 — 30일 주기 변경 권장`, passwordAgeDays, link: "ms-settings:signinoptions" })
-  } else if (passwordAgeDays < 9999) {
-    return NextResponse.json({ status: "fail", detail: `비밀번호 ${passwordAgeDays}일 전 변경 — 즉시 변경 필요`, passwordAgeDays, link: "ms-settings:signinoptions" })
-  }
+  if (passwordAgeDays <= 30) return NextResponse.json({ status: "pass", detail: `비밀번호 ${passwordAgeDays}일 전 변경 — 양호`, passwordAgeDays, link: "ms-settings:signinoptions" })
+  if (passwordAgeDays <= 90) return NextResponse.json({ status: "warn", detail: `비밀번호 ${passwordAgeDays}일 전 변경 — 30일 주기 변경 권장`, passwordAgeDays, link: "ms-settings:signinoptions" })
+  if (passwordAgeDays < 9999) return NextResponse.json({ status: "fail", detail: `비밀번호 ${passwordAgeDays}일 전 변경 — 즉시 변경 필요`, passwordAgeDays, link: "ms-settings:signinoptions" })
 
   const policyRaw = runCmd("net accounts")
   let maxAge = 0
