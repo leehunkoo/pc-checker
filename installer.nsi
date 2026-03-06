@@ -2,11 +2,11 @@ Unicode True
 SetCompressor /SOLID lzma
 
 !define APP_NAME "PC 보안 자가점검"
-!define APP_VERSION "1.0"
+!define APP_VERSION "1.1"
 !define PUBLISHER "보안팀"
 
 Name "${APP_NAME} ${APP_VERSION}"
-OutFile "보안점검_설치.exe"
+OutFile "Security_Check_Setup_v1.1.exe"
 InstallDir "$DESKTOP\보안점검"
 RequestExecutionLevel user
 ShowInstDetails show
@@ -31,6 +31,7 @@ ShowInstDetails show
 !insertmacro MUI_LANGUAGE "Korean"
 
 Section "Main" SecMain
+  CreateDirectory "$INSTDIR"
   SetOutPath "$INSTDIR"
   File "launch.vbs"
   File "version.txt"

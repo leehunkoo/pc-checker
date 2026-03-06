@@ -1,20 +1,5 @@
 import { NextResponse } from "next/server"
 
-const TRUSTED = [
-  "microsoft", "google", "apple", "adobe", "oracle", "intel", "amd", "nvidia",
-  "samsung", "lg", "hp", "dell", "lenovo", "asus", "mozilla", "slack", "zoom",
-  "kakao", "naver", "hancom", "ahnlab", "daum", "windows", "qualcomm",
-  "realtek", "broadcom", "synaptics", "mcafee", "symantec", "kaspersky",
-  "teamviewer", "anydesk", "7-zip", "winrar", "notepad", "vscode",
-  "한컴", "카카오", "네이버", "다음", "정부", "행정전자", "대한민국",
-]
-
-function isTrusted(pub: string) {
-  if (!pub || pub.trim() === "") return false
-  const l = pub.toLowerCase()
-  return TRUSTED.some(t => l.includes(t.toLowerCase()))
-}
-
 export async function GET() {
   try {
     if (process.platform !== "win32") {
@@ -49,26 +34,22 @@ $result | Sort-Object DisplayName -Unique | ConvertTo-Json -Depth 2
 
     let raw = ""
     try {
-      raw = execFileSync("powershell", [
-        "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath
-      ], { encoding: "utf8", timeout: 20000 })
+      raw = execFileSync("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath], { encoding: "utf8", timeout: 20000 })
     } finally {
       try { fs.unlinkSync(scriptPath) } catch {}
     }
 
-    let apps: Array<{ DisplayName: string; Publisher: string; DisplayVersion: string; InstallDate: string }> = []
-    try {
-      const parsed = JSON.parse(raw.trim())
-      apps = Array.isArray(parsed) ? parsed : [parsed]
-    } catch {
-      return NextResponse.json({ status: "manual", detail: "프로그램 목록 파싱 실패 — 수동 확인", suspicious: [] })
+    let apps: any[] = []
+    try { const p = JSON.parse(raw.trim()); apps = Array.isArray(p) ? p : [p] } catch {
+      return NextResponse.json({ status: "manual", detail: "프로그램 목록 파싱 실패", suspicious: [] })
     }
 
+    // Publisher가 있으면 신뢰, 없으면 출처불명
     const suspicious = apps
-      .filter(a => !isTrusted(a.Publisher || ""))
+      .filter(a => !a.Publisher || a.Publisher.trim() === "")
       .map(a => ({
         name: a.DisplayName || "이름없음",
-        publisher: a.Publisher || "알수없음",
+        publisher: "알수없음",
         version: a.DisplayVersion || "-",
         installDate: a.InstallDate || "-",
       }))
@@ -86,7 +67,7 @@ $result | Sort-Object DisplayName -Unique | ConvertTo-Json -Depth 2
   }
 }
 
-export async function DELETE(req: Request) {
+export async function DELETE() {
   try {
     const { execSync } = require("child_process")
     execSync("start appwiz.cpl", { shell: "cmd.exe" })

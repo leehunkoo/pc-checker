@@ -311,14 +311,20 @@ export default function App() {
         if(itemId==="2-2") result={status:data.avUpdated?"pass":"fail",detail:data.avDetail||data.detail,link:data.link,autoChecked:true};
         if(itemId==="2-3") result={status:data.realtimeEnabled?"pass":"fail",detail:data.realtimeDetail||data.detail,link:data.link,autoChecked:true};
       } else if(data && itemId==="7-3") {
-        // DLP(OfficeKeeper) 설치 확인 → 연관 항목도 자동 적합 처리
-        result = data;
+        // 보안 에이전트 설치 확인 → 연관 항목도 자동 적합 처리
+        const agents = data.agents || [];
+        const preview = agents.slice(0,2).map((a:any)=>`${a.name}(${a.type})`).join(", ");
+        const more = agents.length > 2 ? ` 외 ${agents.length-2}개` : "";
+        const agentDetail = agents.length > 0 ? `${preview}${more}` : data.detail;
+        result = {...data, detail: agentDetail, agents};
         if(data.installed) {
-          // 1-2: 계정 비밀번호 8자리 이상 — OfficeKeeper 정책 준수로 적합
-          setResult("1-2",{status:"pass",detail:"OfficeKeeper 보안정책 준수 — 비밀번호 정책 적용 중",autoChecked:true});
-          // 5-3: 미인가 저장매체 — OfficeKeeper DLP로 통제 중
-          setResult("5-3",{status:"pass",detail:"OfficeKeeper DLP로 저장매체 사용 통제 중",autoChecked:true});
+          setResult("1-2",{status:"pass",detail:"보안정책 준수 — 비밀번호 정책 적용 중",autoChecked:true});
+          setResult("5-3",{status:"pass",detail:"DLP로 저장매체 사용 통제 중",autoChecked:true});
+          setResult("7-3",{status:"pass",detail:agentDetail,autoChecked:true});
+        } else {
+          setResult("7-3",{status:"fail",detail:agentDetail,autoChecked:true});
         }
+        result = {status: data.installed ? "pass" : "fail", detail: agentDetail, autoChecked:true};
       } else if(!data){
         if(fallbackKey && FALLBACK_CHECKS[fallbackKey]){
           result = FALLBACK_CHECKS[fallbackKey];
@@ -516,11 +522,27 @@ export default function App() {
                       {item.id==="6-3"&&status==="pass"&&<span style={{fontSize:11,color:"#4ade80"}}>✓ 공유 없음</span>}
                       {item.id==="6-3"&&(status==="fail"||status==="warn")&&<>
                         <SettingsBtn link="ms-settings:network-status" label="네트워크 설정"/>
-                        <button onClick={()=>openSettings("control /name Microsoft.NetworkAndSharingCenter /page Advanced")}
-                          style={{padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:600,background:"rgba(239,68,68,0.15)",border:"1px solid rgba(239,68,68,0.3)",color:"#f87171",cursor:"pointer",fontFamily:"inherit"}}>
-                          🔧 공유 비활성화
-                        </button>
                       </>}
+                      {item.id==="6-3"&&(status==="fail"||status==="warn")&&r?.shares&&r.shares.length>0&&<div style={{width:"100%",marginTop:8}}>
+                        <div style={{fontSize:11,color:"#f87171",marginBottom:6}}>활성화된 공유 목록:</div>
+                        {r.shares.map((sh:any,i:number)=>(
+                          <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 10px",marginBottom:4,background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:8}}>
+                            <div>
+                              <span style={{fontSize:12,fontWeight:600,color:"#f87171"}}>{sh.name}</span>
+                              <span style={{fontSize:11,color:"var(--text-secondary)",marginLeft:8}}>{sh.path}</span>
+                            </div>
+                            <button onClick={async()=>{
+                              if(!confirm(`"${sh.name}" 공유를 비활성화하시겠습니까?`))return;
+                              const res=await fetch("/api/check/fileshare",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:sh.name})});
+                              const data=await res.json();
+                              if(data.success){addToast(`"${sh.name}" 공유 비활성화 완료`,"success");runScan();}
+                              else addToast(`실패: ${data.error}`,"error");
+                            }} style={{padding:"4px 10px",borderRadius:8,fontSize:11,fontWeight:600,background:"rgba(239,68,68,0.2)",border:"1px solid rgba(239,68,68,0.4)",color:"#f87171",cursor:"pointer",fontFamily:"inherit"}}>
+                              🔧 비활성화
+                            </button>
+                          </div>
+                        ))}
+                      </div>}
                       {isAuto&&!isManual&&r?.link&&(status==="fail"||status==="warn")&&item.id!=="3-1"&&item.id!=="6-3"&&
                         <SettingsBtn link={r.link} label="설정 바로가기"/>}
                     </div>

@@ -8,37 +8,92 @@ function runCmd(cmd: string): string {
   try { return execSync(cmd, { encoding: "buffer", shell: "cmd.exe", timeout: 8000 }).toString("utf8").trim() } catch { return "" }
 }
 
+function parseProductState(state: number) {
+  // productState 비트 해석
+  // 상위 2바이트: 제품 존재여부, 하위 2바이트: 실시간감시 상태
+  // 0x1000 = 실시간감시 켜짐, 0x0000 = 꺼짐
+  const rt = (state >> 12) & 0xF
+  const realtimeOn = rt === 1
+  return { realtimeOn }
+}
+
 export async function GET() {
   if (process.platform !== "win32") return NextResponse.json({ status:"manual", detail:"Windows 전용", avUpdated:false, realtimeEnabled:false, avDetail:"", realtimeDetail:"", link:"" })
 
-  let v3Installed = false, v3ServiceRunning = false, v3RealtimeOn = false
-  const v3Svc = runCmd("sc query V3Service") || runCmd("sc query AhnLab_V3Service") || runCmd("sc query V3LTZ64")
-  v3ServiceRunning = v3Svc.includes("RUNNING")
-  const v3Reg = runPS("Get-ItemProperty 'HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like '*V3*' -or $_.DisplayName -like '*AhnLab*' } | Select-Object -First 1 -ExpandProperty DisplayName")
-  if (v3Reg) v3Installed = true
-  const v3RT = runCmd(`reg query "HKLM\\SOFTWARE\\AhnLab\\V3IS90" /v RealTimeProtect`) || runCmd(`reg query "HKLM\\SOFTWARE\\WOW6432Node\\AhnLab\\V3IS90" /v RealTimeProtect`)
-  if (v3RT.match(/RealTimeProtect\s+REG_DWORD\s+0x1/i)) v3RealtimeOn = true
-  else if (v3ServiceRunning && v3Installed) v3RealtimeOn = true
+  // SecurityCenter2로 모든 백신 확인 (가장 정확)
+  let scProducts: Array<{displayName:string, productState:number}> = []
+  try {
+    const scRaw = runPS("Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntivirusProduct | Select-Object displayName,productState | ConvertTo-Json -Depth 2")
+    if (scRaw && scRaw !== "null") {
+      const parsed = JSON.parse(scRaw)
+      scProducts = Array.isArray(parsed) ? parsed : [parsed]
+    }
+  } catch {}
 
-  let defEnabled = false, defRealtime = false, defUpdated = false, defSigAge = 9999
+  // V3 제품 찾기
+  const v3Product = scProducts.find(p => p.displayName && (p.displayName.includes("AhnLab") || p.displayName.includes("V3")))
+  // Defender 제외한 서드파티 백신
+  const thirdParty = scProducts.find(p => p.displayName && !p.displayName.includes("Windows Defender") && !p.displayName.includes("Windows Security"))
+
+  const mainProduct = v3Product || thirdParty
+  
+  if (mainProduct) {
+    const { realtimeOn } = parseProductState(mainProduct.productState)
+    const avName = mainProduct.displayName
+    return NextResponse.json({
+      status: "pass",
+      detail: `${avName} 설치됨`,
+      avName,
+      avInstalled: true,
+      avUpdated: true,
+      avDetail: `${avName} 설치됨`,
+      realtimeEnabled: realtimeOn,
+      realtimeDetail: realtimeOn ? `${avName} 실시간 감시 활성` : `${avName} 실시간 감시 꺼짐 — 확인 필요`,
+      useV3: !!v3Product,
+      defSigAge: 0,
+      link: v3Product ? "" : "windowsdefender:",
+    })
+  }
+
+  // SecurityCenter2에 없으면 Defender 직접 확인
+  let defEnabled = false, defRealtime = false, defSigAge = 9999
   try {
     const defRaw = runPS("Get-MpComputerStatus | Select-Object AntivirusEnabled,RealTimeProtectionEnabled,AntivirusSignatureAge | ConvertTo-Json")
-    if (defRaw) { const def = JSON.parse(defRaw); defEnabled = !!def.AntivirusEnabled; defRealtime = !!def.RealTimeProtectionEnabled; defSigAge = def.AntivirusSignatureAge ?? 9999; defUpdated = defSigAge <= 3 }
+    if (defRaw) {
+      const def = JSON.parse(defRaw)
+      defEnabled = !!def.AntivirusEnabled
+      defRealtime = !!def.RealTimeProtectionEnabled
+      defSigAge = def.AntivirusSignatureAge ?? 9999
+    }
   } catch {}
 
-  let scName = ""
-  try {
-    const scRaw = runPS("Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntivirusProduct | Select-Object displayName | ConvertTo-Json -Depth 2")
-    if (scRaw && scRaw !== "null") { const avs = JSON.parse(scRaw); const avList = Array.isArray(avs) ? avs : [avs]; scName = avList.map((a: any) => a.displayName).join(", ") }
-  } catch {}
+  if (defEnabled || defRealtime) {
+    return NextResponse.json({
+      status: "pass",
+      detail: `Windows Defender 활성 (정의: ${defSigAge}일 전)`,
+      avName: "Windows Defender",
+      avInstalled: true,
+      avUpdated: defSigAge <= 3,
+      avDetail: `Windows Defender 활성 (정의: ${defSigAge}일 전)`,
+      realtimeEnabled: defRealtime,
+      realtimeDetail: defRealtime ? "실시간 보호 활성" : "실시간 보호 꺼짐",
+      useV3: false,
+      defSigAge,
+      link: "windowsdefender:",
+    })
+  }
 
-  const useV3 = v3Installed || v3ServiceRunning
-  const avName = useV3 ? (v3Reg || "AhnLab V3") : (scName || "Windows Defender")
-  const avInstalled = useV3 || defEnabled || !!scName
-  const realtimeEnabled = useV3 ? v3RealtimeOn : defRealtime
-  const avUpdated = useV3 ? true : defUpdated
-  const avDetail = useV3 ? `${avName} 설치됨` : (defEnabled ? `Windows Defender 활성 (정의: ${defSigAge}일 전)` : "백신 없음 — 즉시 설치 필요")
-  const realtimeDetail = useV3 ? (v3RealtimeOn ? `${avName} 실시간 감시 활성` : `${avName} 실시간 감시 꺼짐`) : (defRealtime ? "실시간 보호 활성" : "실시간 보호 꺼짐")
-
-  return NextResponse.json({ status: avInstalled ? "pass" : "fail", detail: avInstalled ? `${avName} 설치됨` : "백신 없음 — 즉시 설치 필요", avName, avInstalled, avUpdated, avDetail, realtimeEnabled, realtimeDetail, useV3, defSigAge, link: useV3 ? "" : "windowsdefender:" })
+  return NextResponse.json({
+    status: "fail",
+    detail: "백신 없음 — 즉시 설치 필요",
+    avName: "",
+    avInstalled: false,
+    avUpdated: false,
+    avDetail: "백신 없음",
+    realtimeEnabled: false,
+    realtimeDetail: "백신 미설치",
+    useV3: false,
+    defSigAge: 9999,
+    link: "windowsdefender:",
+  })
 }
