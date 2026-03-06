@@ -311,14 +311,20 @@ export default function App() {
         if(itemId==="2-2") result={status:data.avUpdated?"pass":"fail",detail:data.avDetail||data.detail,link:data.link,autoChecked:true};
         if(itemId==="2-3") result={status:data.realtimeEnabled?"pass":"fail",detail:data.realtimeDetail||data.detail,link:data.link,autoChecked:true};
       } else if(data && itemId==="7-3") {
-        // DLP(OfficeKeeper) 설치 확인 → 연관 항목도 자동 적합 처리
-        result = data;
+        // 보안 에이전트 설치 확인 → 연관 항목도 자동 적합 처리
+        const agents = data.agents || [];
+        const preview = agents.slice(0,2).map((a:any)=>`${a.name}(${a.type})`).join(", ");
+        const more = agents.length > 2 ? ` 외 ${agents.length-2}개` : "";
+        const agentDetail = agents.length > 0 ? `${preview}${more}` : data.detail;
+        result = {...data, detail: agentDetail, agents};
         if(data.installed) {
-          // 1-2: 계정 비밀번호 8자리 이상 — OfficeKeeper 정책 준수로 적합
-          setResult("1-2",{status:"pass",detail:"OfficeKeeper 보안정책 준수 — 비밀번호 정책 적용 중",autoChecked:true});
-          // 5-3: 미인가 저장매체 — OfficeKeeper DLP로 통제 중
-          setResult("5-3",{status:"pass",detail:"OfficeKeeper DLP로 저장매체 사용 통제 중",autoChecked:true});
+          setResult("1-2",{status:"pass",detail:"보안정책 준수 — 비밀번호 정책 적용 중",autoChecked:true});
+          setResult("5-3",{status:"pass",detail:"DLP로 저장매체 사용 통제 중",autoChecked:true});
+          setResult("7-3",{status:"pass",detail:agentDetail,autoChecked:true});
+        } else {
+          setResult("7-3",{status:"fail",detail:agentDetail,autoChecked:true});
         }
+        result = {status: data.installed ? "pass" : "fail", detail: agentDetail, autoChecked:true};
       } else if(!data){
         if(fallbackKey && FALLBACK_CHECKS[fallbackKey]){
           result = FALLBACK_CHECKS[fallbackKey];

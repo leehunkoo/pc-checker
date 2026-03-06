@@ -23,60 +23,18 @@ foreach ($p in $paths) {
   if (Test-Path $p) {
     $items = Get-ItemProperty $p -ErrorAction SilentlyContinue |
       Where-Object { $_.DisplayName -and $_.DisplayName.Trim() -ne '' } |
-      Select-Object DisplayName, Publisher, DisplayVersion, InstallDate, InstallLocation, UninstallString
+      Select-Object DisplayName, Publisher, DisplayVersion, InstallDate
     $result += $items
   }
 }
-
-$final = @()
-foreach ($app in ($result | Sort-Object DisplayName -Unique)) {
-  $signed = $false
-  $signerName = ""
-
-  # EXE 경로 찾기 (InstallLocation 또는 UninstallString에서)
-  $exePath = ""
-  if ($app.InstallLocation -and (Test-Path $app.InstallLocation)) {
-    $exe = Get-ChildItem $app.InstallLocation -Filter "*.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($exe) { $exePath = $exe.FullName }
-  }
-  if (-not $exePath -and $app.UninstallString) {
-    $m = $app.UninstallString -match '"?([A-Za-z]:\\[^"]+\.exe)'
-    if ($matches[1] -and (Test-Path $matches[1])) { $exePath = $matches[1] }
-  }
-
-  # 디지털 서명 확인
-  if ($exePath) {
-    try {
-      $sig = Get-AuthenticodeSignature $exePath -ErrorAction SilentlyContinue
-      if ($sig.Status -eq "Valid") {
-        $signed = $true
-        $signerName = $sig.SignerCertificate.Subject -replace ".*CN=([^,]+).*", '$1'
-      }
-    } catch {}
-  }
-
-  # Publisher가 있거나 서명이 있으면 신뢰
-  $trusted = $signed -or ($app.Publisher -and $app.Publisher.Trim() -ne "")
-
-  $final += [PSCustomObject]@{
-    DisplayName = $app.DisplayName
-    Publisher = $app.Publisher
-    DisplayVersion = $app.DisplayVersion
-    InstallDate = $app.InstallDate
-    Signed = $signed
-    SignerName = $signerName
-    Trusted = $trusted
-  }
-}
-
-$final | ConvertTo-Json -Depth 2
+$result | Sort-Object DisplayName -Unique | ConvertTo-Json -Depth 2
 `
     const scriptPath = path.join(os.tmpdir(), "sw_check.ps1")
     fs.writeFileSync(scriptPath, `\uFEFF${psScript}`, "utf8")
 
     let raw = ""
     try {
-      raw = execFileSync("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath], { encoding: "utf8", timeout: 30000 })
+      raw = execFileSync("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath], { encoding: "utf8", timeout: 20000 })
     } finally {
       try { fs.unlinkSync(scriptPath) } catch {}
     }
@@ -86,14 +44,14 @@ $final | ConvertTo-Json -Depth 2
       return NextResponse.json({ status: "manual", detail: "프로그램 목록 파싱 실패", suspicious: [] })
     }
 
+    // Publisher가 있으면 신뢰, 없으면 출처불명
     const suspicious = apps
-      .filter(a => !a.Trusted)
+      .filter(a => !a.Publisher || a.Publisher.trim() === "")
       .map(a => ({
         name: a.DisplayName || "이름없음",
-        publisher: a.Publisher || "알수없음",
+        publisher: "알수없음",
         version: a.DisplayVersion || "-",
         installDate: a.InstallDate || "-",
-        signed: a.Signed,
       }))
       .slice(0, 60)
 
