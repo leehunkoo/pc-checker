@@ -1,56 +1,39 @@
 import { NextResponse } from "next/server"
 import { execSync } from "child_process"
 
+function runCmd(cmd: string): string {
+  try { return execSync(cmd, { encoding: "buffer", shell: "cmd.exe", timeout: 6000 }).toString("utf8").trim() } catch { return "" }
+}
+
+function getRegValue(raw: string, key: string): string {
+  const m = raw.match(new RegExp(`${key}\\s+REG_\\w+\\s+(.+)`, "i"))
+  return m ? m[1].trim() : ""
+}
+
 export async function GET() {
-  try {
-    if (process.platform !== "win32") {
-      return NextResponse.json({ status: "manual", detail: "Windows 전용", link: "ms-settings:personalization-lockscreen" })
-    }
+  if (process.platform !== "win32") return NextResponse.json({ status: "manual", detail: "Windows 전용", link: "" })
 
-    // 화면보호기 활성화 여부
-    let ssActive = false
-    let ssTimeout = 9999
-    let ssSecure = false // 암호 보호 여부
+  const activeRaw  = runCmd(`reg query "HKCU\\Control Panel\\Desktop" /v ScreenSaveActive`)
+  const timeoutRaw = runCmd(`reg query "HKCU\\Control Panel\\Desktop" /v ScreenSaveTimeOut`)
+  const lockRaw    = runCmd(`reg query "HKCU\\Control Panel\\Desktop" /v ScreenSaverIsSecure`)
 
-    try {
-      const timeout = execSync(
-        `reg query "HKCU\\Control Panel\\Desktop" /v ScreenSaveTimeOut`,
-        { encoding: "buffer", shell: "cmd.exe" }
-      ).toString("utf8")
-      const m = timeout.match(/ScreenSaveTimeOut\s+REG_SZ\s+(\d+)/i)
-      if (m) ssTimeout = parseInt(m[1])
-    } catch {}
+  const activeVal  = getRegValue(activeRaw,  "ScreenSaveActive")
+  const timeoutVal = getRegValue(timeoutRaw, "ScreenSaveTimeOut")
+  const lockVal    = getRegValue(lockRaw,    "ScreenSaverIsSecure")
 
-    try {
-      const active = execSync(
-        `reg query "HKCU\\Control Panel\\Desktop" /v ScreenSaveActive`,
-        { encoding: "buffer", shell: "cmd.exe" }
-      ).toString("utf8")
-      ssActive = active.includes("1")
-    } catch {}
+  const isActive  = activeVal === "1" || activeVal === "0x1"
+  const lockOn    = lockVal   === "1" || lockVal   === "0x1"
+  const timeoutSec = parseInt(timeoutVal) || 0
+  const timeoutMin = Math.round(timeoutSec / 60)
 
-    try {
-      const secure = execSync(
-        `reg query "HKCU\\Control Panel\\Desktop" /v ScreenSaverIsSecure`,
-        { encoding: "buffer", shell: "cmd.exe" }
-      ).toString("utf8")
-      ssSecure = secure.includes("1")
-    } catch {}
-
-    const timeoutMin = ssTimeout === 9999 ? "?" : Math.round(ssTimeout / 60)
-
-    if (!ssActive) {
-      return NextResponse.json({ status: "fail", detail: "화면보호기 비활성화 — 즉시 설정 필요", link: "ms-settings:personalization-lockscreen" })
-    }
-    if (ssTimeout > 600) {
-      return NextResponse.json({ status: "warn", detail: `화면보호기 ${timeoutMin}분 설정 — 10분 이내 권장`, link: "ms-settings:personalization-lockscreen" })
-    }
-    if (!ssSecure) {
-      return NextResponse.json({ status: "warn", detail: `화면보호기 ${timeoutMin}분 / 잠금 암호 미설정 — 설정 권장`, link: "ms-settings:personalization-lockscreen" })
-    }
-
-    return NextResponse.json({ status: "pass", detail: `화면보호기 ${timeoutMin}분 / 잠금 암호 설정 — 양호`, link: "ms-settings:personalization-lockscreen" })
-  } catch {
-    return NextResponse.json({ status: "manual", detail: "화면보호기 설정 조회 실패 — 수동 확인", link: "ms-settings:personalization-lockscreen" })
+  if (isActive && lockOn && timeoutMin > 0 && timeoutMin <= 10) {
+    return NextResponse.json({ status: "pass", detail: `화면보호기 ${timeoutMin}분 설정 — 잠금 활성`, link: "ms-settings:personalization-lockscreen" })
   }
+  if (isActive && lockOn && timeoutMin > 10) {
+    return NextResponse.json({ status: "warn", detail: `화면보호기 ${timeoutMin}분 설정 — 10분 이내 권장`, link: "ms-settings:personalization-lockscreen" })
+  }
+  if (isActive && !lockOn) {
+    return NextResponse.json({ status: "warn", detail: `화면보호기 ${timeoutMin}분 설정 — 잠금 미설정`, link: "ms-settings:personalization-lockscreen" })
+  }
+  return NextResponse.json({ status: "fail", detail: "화면보호기 비활성 — 즉시 설정 필요", link: "ms-settings:personalization-lockscreen" })
 }

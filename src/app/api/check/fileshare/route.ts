@@ -1,64 +1,57 @@
 import { NextResponse } from "next/server"
 import { execSync } from "child_process"
 
+function runCmd(cmd: string): string {
+  try { return execSync(cmd, { encoding: "buffer", shell: "cmd.exe", timeout: 6000 }).toString("utf8").trim() } catch { return "" }
+}
+
+const SYSTEM_SHARES = ["C$", "ADMIN$", "IPC$", "PRINT$", "D$", "E$", "F$"]
+
 export async function GET() {
+  if (process.platform !== "win32") return NextResponse.json({ status: "manual", detail: "Windows 전용", shares: [], link: "" })
+
+  const raw = runCmd("net share")
+  const lines = raw.split(/\r?\n/)
+
+  const shares: Array<{name:string, path:string, remark:string}> = []
+  for (const line of lines) {
+    const parts = line.trim().split(/\s{2,}/)
+    const name = parts[0]
+    if (!name || SYSTEM_SHARES.includes(name.toUpperCase())) continue
+    if (line.includes("공유 이름") || line.includes("Share name") || line.includes("---") || line.includes("명령이") || line.includes("성공")) continue
+    if (name.length > 0 && !name.includes(" ")) {
+      shares.push({ name, path: parts[1] || "-", remark: parts[2] || "-" })
+    }
+  }
+
+  if (shares.length === 0) {
+    return NextResponse.json({ status: "pass", detail: "불필요한 파일 공유 없음", shares: [], link: "" })
+  }
+  return NextResponse.json({
+    status: "fail",
+    detail: `파일 공유 ${shares.length}개 활성화됨 — 확인 필요`,
+    shares,
+    link: "ms-settings:network-status"
+  })
+}
+
+export async function DELETE(req: Request) {
   try {
-    if (process.platform !== "win32") {
-      return NextResponse.json({ status: "manual", detail: "Windows 전용", link: "ms-settings:network-status" })
+    const { name } = await req.json()
+    if (!name || typeof name !== "string" || name.length > 80) {
+      return NextResponse.json({ success: false, error: "잘못된 공유 이름" })
     }
-
-    let sharesFound: string[] = []
-    let networkDiscovery = false
-
-    // 1. 공유 폴더 확인 ($ 제외한 실제 공유만)
-    try {
-      const raw = execSync(
-        `powershell -NoProfile -Command "Get-SmbShare | Where-Object { $_.Name -notmatch '[$]' } | Select-Object -ExpandProperty Name"`,
-        { encoding: "utf8", shell: "cmd.exe" }
-      ).trim()
-      sharesFound = raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean)
-    } catch {
-      // Get-SmbShare 실패시 net share로 대체
-      try {
-        const raw2 = execSync(`net share`, { encoding: "buffer", shell: "cmd.exe" }).toString("utf8")
-        sharesFound = raw2.split(/\r?\n/)
-          .slice(3)
-          .map(l => l.split(/\s+/)[0])
-          .filter(n => n && n.length > 0 && !n.endsWith("$") && !n.includes("---") && !n.includes("공유") && !n.includes("Share"))
-      } catch {}
+    // 시스템 공유 삭제 방지
+    if (SYSTEM_SHARES.includes(name.toUpperCase())) {
+      return NextResponse.json({ success: false, error: "시스템 공유는 삭제할 수 없습니다" })
     }
-
-    // 2. 네트워크 검색 — 방화벽 규칙 대신 레지스트리로 확인
-    try {
-      const reg = execSync(
-        `reg query "HKLM\\SYSTEM\\CurrentControlSet\\Services\\fdrespub" /v Start`,
-        { encoding: "buffer", shell: "cmd.exe" }
-      ).toString("utf8")
-      const m = reg.match(/Start\s+REG_DWORD\s+(0x[\da-fA-F]+)/i)
-      if (m) {
-        const val = parseInt(m[1], 16)
-        // 2=자동, 3=수동, 4=사용안함
-        networkDiscovery = val <= 3
-      }
-    } catch {}
-
-    const hasIssue = sharesFound.length > 0
-    const status = hasIssue ? "fail" : "pass"
-
-    const details: string[] = []
-    if (sharesFound.length > 0) details.push(`공유 폴더 발견: ${sharesFound.join(", ")}`)
-    if (networkDiscovery) details.push("네트워크 검색 서비스 활성")
-    if (!hasIssue) details.push("파일 공유 없음 — 양호")
-
-    return NextResponse.json({
-      status,
-      detail: details.join(" / "),
-      shares: sharesFound,
-      networkDiscovery,
-      link: "ms-settings:network-status",
-    })
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e)
-    return NextResponse.json({ status: "manual", detail: `조회 실패 (${msg.slice(0, 60)})`, shares: [], link: "ms-settings:network-status" })
+    // 특수문자 방지 (인젝션 방지)
+    if (!/^[\w\-가-힣\s]+$/.test(name)) {
+      return NextResponse.json({ success: false, error: "잘못된 공유 이름" })
+    }
+    runCmd(`net share "${name}" /delete /y`)
+    return NextResponse.json({ success: true })
+  } catch (e) {
+    return NextResponse.json({ success: false, error: String(e) })
   }
 }
