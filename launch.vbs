@@ -26,6 +26,18 @@ End If
 objShell.CurrentDirectory = appPath
 objShell.Run Chr(34) & nodeExe & Chr(34) & " " & Chr(34) & npmCli & Chr(34) & " run dev -- -p 3000", 0, False
 
-' 8초 대기 후 브라우저 오픈
-WScript.Sleep 8000
+' 서버 준비될 때까지 폴링 대기 (최대 60초)
+Dim xmlHttp, ready, waited
+ready = False
+waited = 0
+Do While Not ready And waited < 60
+    WScript.Sleep 2000
+    waited = waited + 2
+    On Error Resume Next
+    Set xmlHttp = CreateObject("Msxml2.XMLHTTP.6.0")
+    xmlHttp.Open "GET", "http://localhost:3000", False
+    xmlHttp.Send
+    If Err.Number = 0 Then ready = True
+    On Error GoTo 0
+Loop
 objShell.Run "http://localhost:3000"

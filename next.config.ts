@@ -1,6 +1,8 @@
 import type { NextConfig } from "next"
 
 const nextConfig: NextConfig = {
+  // pdfkit은 Next.js 번들링에서 제외 (API 라우트에서 직접 node_modules 참조)
+  serverExternalPackages: ["pdfkit"],
   // 외부 접근 차단 - localhost만 허용
   experimental: {
     serverActions: {

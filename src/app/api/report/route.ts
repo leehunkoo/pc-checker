@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import fs from "fs"
 import pathModule from "path"
 // @ts-ignore
-import PDFDocument from "pdfkit/js/pdfkit.standalone"
+import PDFDocument from "pdfkit"
 
 const SECTIONS = [
   { title: "1. 계정 및 비밀번호 관리", items: [
@@ -207,6 +207,8 @@ export async function POST(req: Request) {
     }
 
     // ── 푸터 ──
+    // 페이지 하단에 충분한 공간이 없으면 새 페이지
+    if (doc.y > 760) doc.addPage()
     doc.moveDown(0.5)
     doc.moveTo(40, doc.y).lineTo(555, doc.y).strokeColor("#cbd5e1").lineWidth(0.5).stroke()
     doc.moveDown(0.2)
