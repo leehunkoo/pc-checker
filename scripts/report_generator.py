@@ -182,7 +182,8 @@ def generate_pdf(results, inspector, filename):
     story.append(Spacer(1,6*mm))
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#cbd5e1")))
     story.append(Spacer(1,3*mm))
-    story.append(Paragraph(f"본 보고서는 PC 보안 자가점검 시스템에 의해 자동 생성되었습니다. 생성시각: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", sty("foot", fontSize=8, textColor=colors.HexColor("#94a3b8"), leading=12)))
+    from reportlab.lib.enums import TA_LEFT
+    story.append(Paragraph(f"본 보고서는 PC 보안 자가점검 시스템에 의해 자동 생성되었습니다. 생성시각: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ParagraphStyle("foot2", fontName=korean_font, fontSize=8, textColor=colors.HexColor("#94a3b8"), leading=12, alignment=TA_LEFT)))
 
     doc.build(story)
     print(f"[OK] PDF 생성 완료: {filename}")
